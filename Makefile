@@ -3,7 +3,7 @@
 		pre-commit update-pre-commit
 
 
-PROJECT_NAME := example_package
+PROJECT_NAME := crunchmania
 
 
 all: dev coverage  ## builds everything

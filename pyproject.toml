@@ -1,16 +1,33 @@
 [project]
-name = "example_package"
-description = "example package"
+name = "crunchmania"
+description = "unpacking crunch-mania files from the Amiga days"
 version = "0.1.0"
 authors = [
-    { name = "Random Hacker", email = "no@dev.null" }
+    { name = "Gareth Davidson", email = "gaz@bitplane.net" }
 ]
 readme = "README.md"
 requires-python = ">=3.10"
 
-dependencies = [
-
+license = "Unlicense"
+keywords = ["crunchmania", "crunch-mania", "amiga", "decompression"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
+
+dependencies = []
+
+[project.scripts]
+crunchmania = "crunchmania.cli:main"
+
+[project.urls]
+Homepage = "https://bitplane.net/dev/python/crunchmania"
+Repository = "https://github.com/bitplane/crunchmania"
+Issues = "https://github.com/bitplane/crunchmania/issues"
 
 [project.optional-dependencies]
 dev = [

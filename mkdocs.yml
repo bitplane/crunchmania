@@ -1,5 +1,5 @@
-site_name: example-python-project
-repo_url: https://github.com/bitplane/python/example-python-project
+site_name: crunchmania
+repo_url: https://github.com/bitplane/crunchmania
 theme:
   name: material
   palette:
