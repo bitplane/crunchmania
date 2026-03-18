@@ -36,8 +36,8 @@ release: scripts/release.sh ## publish to pypi
 
 # Caching doesn't work if we depend on PHONY targets
 
-.docs/index.html: .venv/.installed-dev scripts/docs.sh mkdocs.yml $(shell find -name '*.md')
-	scripts/docs.sh $(PROJECT_NAME)
+.docs/index.html: .venv/.installed-dev scripts/docs.sh $(shell find -name '*.md')
+	scripts/docs.sh
 
 .venv/.installed: pyproject.toml .venv/bin/activate scripts/install.sh $(shell find src -name '*.py')
 	scripts/install.sh $(PROJECT_NAME)

@@ -8,7 +8,7 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.10"
 
-license = "Unlicense"
+license = "WTFPL"
 keywords = ["crunchmania", "crunch-mania", "amiga", "decompression"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -38,8 +38,6 @@ dev = [
     "build",
     "twine",
     "ruff",
-    "mkdocs",
-    "mkdocs-material",
     "pydoc-markdown"
 ]
 
