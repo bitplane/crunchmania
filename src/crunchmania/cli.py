@@ -4,7 +4,24 @@ from pathlib import Path
 
 from crunchmania.constants import HEADER_SIZE, MAGIC_IDS, CLONE_IDS
 from crunchmania.header import parse_header
+from crunchmania.pack import pack
 from crunchmania.unpack import unpack
+
+
+def cmd_pack(args):
+    data = args.input.read_bytes()
+
+    result = pack(data, sampled=args.sampled)
+
+    output = args.output
+    if output is None:
+        output = args.input.with_suffix(".crm")
+        if output == args.input:
+            output = args.input.with_suffix(".crm.packed")
+
+    output.write_bytes(result)
+    print(f"packed {len(data)} -> {len(result)} bytes to {output}")
+    return 0
 
 
 def cmd_unpack(args):
@@ -80,6 +97,12 @@ def main(argv=None):
         description="Crunch-Mania decompression tool",
     )
     sub = parser.add_subparsers(dest="command")
+
+    p_pack = sub.add_parser("pack", aliases=["p"], help="compress a file")
+    p_pack.add_argument("input", type=Path, help="input file")
+    p_pack.add_argument("output", type=Path, nargs="?", help="output file")
+    p_pack.add_argument("--sampled", action="store_true", help="use delta encoding")
+    p_pack.set_defaults(func=cmd_pack)
 
     p_unpack = sub.add_parser("unpack", aliases=["u"], help="decompress a file")
     p_unpack.add_argument("input", type=Path, help="input file")
