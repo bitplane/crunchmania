@@ -37,9 +37,14 @@ def data_dir():
 
 
 def ancient_decompress(filename: str, tmp_path: Path) -> bytes:
-    """Decompress a file using ancient and return the output bytes."""
-    input_path = DATA_DIR / filename
-    output_path = tmp_path / f"ancient_{filename}"
+    """Decompress a file using ancient and return the output bytes.
+
+    `filename` may be a bare name (resolved against DATA_DIR) or an absolute
+    path to a file the caller already wrote.
+    """
+    candidate = Path(filename)
+    input_path = candidate if candidate.is_absolute() else DATA_DIR / filename
+    output_path = tmp_path / f"ancient_{input_path.name}"
     result = subprocess.run(
         ["ancient", "decompress", str(input_path), str(output_path)],
         capture_output=True,

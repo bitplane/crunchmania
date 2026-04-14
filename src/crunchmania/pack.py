@@ -1,6 +1,5 @@
 import struct
 
-from crunchmania.bitwriter import BackwardBitWriter
 from crunchmania.constants import (
     DISTANCE_BITS,
     DISTANCE_OFFSETS,
@@ -9,114 +8,164 @@ from crunchmania.constants import (
 )
 
 
-def _encode_length_index(writer: BackwardBitWriter, index: int):
-    """Encode length index using fixed Huffman: 0→0, 1→10, 2→110, 3→111."""
-    if index == 0:
-        writer.write_bit(0)
-    elif index == 1:
-        writer.write_bit(0)
-        writer.write_bit(1)
-    elif index == 2:
-        writer.write_bit(0)
-        writer.write_bit(1)
-        writer.write_bit(1)
-    else:
-        writer.write_bit(1)
-        writer.write_bit(1)
-        writer.write_bit(1)
+MAX_DISTANCE = DISTANCE_OFFSETS[-1] + (1 << DISTANCE_BITS[-1]) - 1
+MAX_MATCH = 278
+MIN_MATCH = 2
+CHAIN_LIMIT = 4096
 
 
-def _encode_distance_index(writer: BackwardBitWriter, index: int):
-    """Encode distance index using fixed Huffman: 0→10, 1→0, 2→11."""
-    if index == 0:
-        writer.write_bit(0)
-        writer.write_bit(1)
-    elif index == 1:
-        writer.write_bit(0)
-    else:
-        writer.write_bit(1)
-        writer.write_bit(1)
+class _Stream:
+    """Builds the bit stream the decoder will read, in decoder read order.
+
+    The existing BackwardBitReader fills its accumulator from the trailer
+    (high 16 bits of buf_content with shift=0) and then pulls bytes from
+    data[end-1] downward. Each pulled byte is read LSB-first. So the stream
+    we emit here maps to the file as: bits[0..15] → trailer, bits[16..23] →
+    body[end-1], bits[24..31] → body[end-2], etc.
+    """
+
+    def __init__(self):
+        self._bits = bytearray()
+
+    def write_bit(self, value: int):
+        self._bits.append(value & 1)
+
+    def write_bits(self, value: int, count: int):
+        for i in range(count):
+            self._bits.append((value >> i) & 1)
+
+    def finalize(self) -> bytes:
+        bits = self._bits
+        while len(bits) < 16:
+            bits.append(0)
+        while len(bits) % 8:
+            bits.append(0)
+
+        acc16 = 0
+        for i in range(16):
+            acc16 |= bits[i] << i
+        buf_content = acc16 << 16
+
+        rest = bits[16:]
+        nbytes = len(rest) // 8
+        body = bytearray(nbytes)
+        for k in range(nbytes):
+            v = 0
+            for i in range(8):
+                v |= rest[8 * k + i] << i
+            body[nbytes - 1 - k] = v
+
+        return bytes(body) + struct.pack(">IH", buf_content, 0)
 
 
-def _vlc_encode(writer: BackwardBitWriter, bits_table: tuple, offset_table: tuple, value: int) -> int:
-    """Find the right VLC index for value, write the extra bits, return the index."""
-    index = len(bits_table) - 1
+def _vlc_index(value: int, bits_table: tuple, offset_table: tuple) -> int:
     for i in range(len(bits_table) - 1, -1, -1):
         if value >= offset_table[i]:
-            index = i
-            break
-    writer.write_bits(value - offset_table[index], bits_table[index])
-    return index
+            return i
+    return 0
 
 
-def _encode_literal(writer: BackwardBitWriter, byte: int):
-    writer.write_bits(byte, 8)
-    writer.write_bit(1)
+def _encode_length_index(stream: _Stream, index: int):
+    # Decoder: bit→0:idx0, bit→1 then bit→0:idx1, then bit→0:idx2, else idx3.
+    if index == 0:
+        stream.write_bit(0)
+    elif index == 1:
+        stream.write_bit(1)
+        stream.write_bit(0)
+    elif index == 2:
+        stream.write_bit(1)
+        stream.write_bit(1)
+        stream.write_bit(0)
+    else:
+        stream.write_bit(1)
+        stream.write_bit(1)
+        stream.write_bit(1)
 
 
-def _encode_match(writer: BackwardBitWriter, count: int, distance: int):
-    """Encode a match. count is the raw match length (>= 2)."""
-    # Distance VLC + Huffman
-    dist_index = _vlc_encode(writer, DISTANCE_BITS, DISTANCE_OFFSETS, distance)
-    _encode_distance_index(writer, dist_index)
-
-    # Length encoding: the decoder does count = vlc + 2, then if count > 23: count -= 1
-    # So for raw count 2..22: encode vlc = count - 2 (gives count 2..22, none hit 23)
-    # For raw count 23: encode vlc = 22 (gives decoded count 24, then -1 = 23)
-    # For raw count 24+: encode vlc = count - 2 + 1 = count - 1
-    #   (gives decoded count = count, then -1 = count - 1... no)
-    #
-    # Decoder: vlc_value = vlc_decode(); count = vlc_value + 2
-    #   if count == 23: literal escape (skip)
-    #   if count > 23: count -= 1
-    #
-    # So vlc=21 → count=23 is literal escape, we must skip it.
-    # For match length L:
-    #   L <= 22: vlc = L - 2 (decoded: L, no adjustment)
-    #   L >= 23: vlc = L - 1 (decoded: L+1, then -1 = L)
-    adjusted = count - 2
-    if adjusted >= 21:
-        adjusted += 1  # skip vlc=21 (count=23 literal escape)
-
-    length_index = _vlc_encode(writer, LENGTH_BITS, LENGTH_OFFSETS, adjusted)
-    _encode_length_index(writer, length_index)
-
-    writer.write_bit(0)
+def _encode_distance_index(stream: _Stream, index: int):
+    # Decoder: bit→0:idx1, bit→1 then bit→0:idx0, else idx2.
+    if index == 1:
+        stream.write_bit(0)
+    elif index == 0:
+        stream.write_bit(1)
+        stream.write_bit(0)
+    else:
+        stream.write_bit(1)
+        stream.write_bit(1)
 
 
-# Max values derivable from VLC tables
-MAX_DISTANCE = DISTANCE_OFFSETS[-1] + (1 << DISTANCE_BITS[-1]) - 1  # 16927
-MAX_MATCH = LENGTH_OFFSETS[-1] + (1 << LENGTH_BITS[-1]) - 1 + 2  # 279, but skip 23 → 278
-MAX_VLC_LENGTH = 277  # max vlc value (skip 21) + 2; capped at 278 match length
-
-CHAIN_LIMIT = 4096
-MIN_MATCH = 2
+def _encode_literal(stream: _Stream, byte: int):
+    stream.write_bit(1)
+    stream.write_bits(byte, 8)
 
 
-def _find_match(data: bytes | bytearray, pos: int, hash_chains: dict, size: int) -> tuple[int, int]:
-    """Find best match at pos, looking at data[pos:] matching against data further ahead.
+def _encode_match(stream: _Stream, length: int, distance: int):
+    stream.write_bit(0)
 
-    Returns (length, distance) or (0, 0) if no match found.
+    # Length: count = vlc + 2; if count > 23 the decoder subtracts 1.
+    # vlc=21 (count=23) is reserved for the literal-escape; never emit it.
+    #   L in [2,22]: vlc = L - 2
+    #   L in [23,278]: vlc = L - 1
+    if length <= 22:
+        length_vlc = length - 2
+    else:
+        length_vlc = length - 1
+    length_index = _vlc_index(length_vlc, LENGTH_BITS, LENGTH_OFFSETS)
+    _encode_length_index(stream, length_index)
+    extra = length_vlc - LENGTH_OFFSETS[length_index]
+    stream.write_bits(extra, LENGTH_BITS[length_index])
+
+    distance_index = _vlc_index(distance, DISTANCE_BITS, DISTANCE_OFFSETS)
+    _encode_distance_index(stream, distance_index)
+    extra = distance - DISTANCE_OFFSETS[distance_index]
+    stream.write_bits(extra, DISTANCE_BITS[distance_index])
+
+
+def _apply_inverse_delta(data: bytes | bytearray) -> bytearray:
+    out = bytearray(len(data))
+    prev = 0
+    for i in range(len(data)):
+        out[i] = (data[i] - prev) & 0xFF
+        prev = data[i]
+    return out
+
+
+def _find_match(data: bytearray, pos: int, hash_chains: dict, size: int) -> tuple[int, int]:
+    """Standard forward LZ77 longest-match search at pos.
+
+    Looks at earlier positions (backward references). Returns (length, distance)
+    where distance = pos - candidate, or (0, 0) if no match >= MIN_MATCH.
     """
     if pos + MIN_MATCH > size:
         return 0, 0
+    if pos + 2 >= size:
+        return 0, 0
 
-    h = (data[pos] << 16) | (data[pos + 1] << 8) | data[pos + 2] if pos + 2 < size else 0
-    chain = hash_chains.get(h, [])
+    h = (data[pos] << 16) | (data[pos + 1] << 8) | data[pos + 2]
+    chain = hash_chains.get(h)
+    if not chain:
+        return 0, 0
 
-    best_len = 1
+    best_len = MIN_MATCH - 1
     best_dist = 0
-    max_len = min(size - pos, 278)
+    max_len = min(size - pos, MAX_MATCH)
 
-    for steps, candidate in enumerate(chain):
+    steps = 0
+    for candidate in reversed(chain):
         if steps >= CHAIN_LIMIT:
             break
+        steps += 1
 
-        dist = candidate - pos
-        if dist <= 0 or dist > MAX_DISTANCE:
+        dist = pos - candidate
+        if dist > MAX_DISTANCE:
+            break
+        if dist <= 0:
             continue
 
-        # Check match length
+        # Cheap reject: must beat best on the byte after current best length.
+        if data[candidate + best_len] != data[pos + best_len]:
+            continue
+
         length = 0
         while length < max_len and data[pos + length] == data[candidate + length]:
             length += 1
@@ -132,63 +181,41 @@ def _find_match(data: bytes | bytearray, pos: int, hash_chains: dict, size: int)
     return 0, 0
 
 
-def _apply_inverse_delta(data: bytes | bytearray) -> bytearray:
-    """Inverse of _apply_delta: convert absolute values to deltas."""
-    out = bytearray(len(data))
-    prev = 0
-    for i in range(len(data)):
-        out[i] = (data[i] - prev) & 0xFF
-        prev = data[i]
-    return out
-
-
 def pack(data: bytes | bytearray, sampled: bool = False) -> bytes:
-    """Compress data using Crunch-Mania standard mode.
-
-    Args:
-        data: raw data to compress
-        sampled: if True, apply delta encoding (Crm! magic)
-
-    Returns:
-        compressed data with CrM header
-    """
+    """Compress data using Crunch-Mania standard mode (CrM!/Crm!)."""
     raw_size = len(data)
 
     if sampled:
-        work = _apply_inverse_delta(data)
+        forward = _apply_inverse_delta(data)
     else:
-        work = bytearray(data) if isinstance(data, bytes) else bytearray(data)
+        forward = bytearray(data)
 
-    writer = BackwardBitWriter()
+    # The decoder fills its output buffer from the highest index down, so the
+    # first decoded decision describes the tail of the file. Equivalently, we
+    # run forward LZ77 on the reversed buffer and emit decisions in scan order.
+    work = bytearray(reversed(forward))
 
-    # Build hash chains scanning forward (so chains list positions in order).
-    # We process backward, and matches reference higher positions (already visited).
+    stream = _Stream()
     hash_chains: dict[int, list[int]] = {}
-    for i in range(raw_size - 2):
-        h = (work[i] << 16) | (work[i + 1] << 8) | work[i + 2]
-        hash_chains.setdefault(h, []).append(i)
-
-    # Process backward: cursor is the write position, we emit from raw_size down to 0
     pos = 0
-    decisions = []  # collect (pos, action) then encode in reverse
 
     while pos < raw_size:
         length, distance = _find_match(work, pos, hash_chains, raw_size)
         if length >= MIN_MATCH:
-            decisions.append(("match", length, distance))
-            pos += length
+            _encode_match(stream, length, distance)
+            step = length
         else:
-            decisions.append(("lit", work[pos]))
-            pos += 1
+            _encode_literal(stream, work[pos])
+            step = 1
 
-    # Encode in reverse order (backward bit writer, decoder processes backward)
-    for decision in reversed(decisions):
-        if decision[0] == "lit":
-            _encode_literal(writer, decision[1])
-        else:
-            _encode_match(writer, decision[1], decision[2])
+        end_insert = min(pos + step, raw_size - 2)
+        for i in range(pos, end_insert):
+            h = (work[i] << 16) | (work[i + 1] << 8) | work[i + 2]
+            hash_chains.setdefault(h, []).append(i)
 
-    packed_data = writer.finish()
+        pos += step
+
+    packed_data = stream.finalize()
     packed_size = len(packed_data)
 
     magic = b"Crm!" if sampled else b"CrM!"
