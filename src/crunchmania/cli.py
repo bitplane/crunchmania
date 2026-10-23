@@ -1,5 +1,7 @@
 import argparse
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 from crunchmania.constants import CLONE_IDS, HEADER_SIZE, MAGIC_IDS
@@ -9,8 +11,25 @@ from crunchmania.unpack import DEFAULT_MAX_OUTPUT_SIZE, unpack
 
 
 def _write_output(output: Path, data: bytes, force: bool):
-    with output.open("wb" if force else "xb") as file:
-        file.write(data)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=output.parent, prefix=".crunchmania-", delete=False) as file:
+            temporary = Path(file.name)
+            file.write(data)
+            file.flush()
+            os.fsync(file.fileno())
+        if force:
+            os.replace(temporary, output)
+        else:
+            # Linking publishes a complete file without replacing a destination
+            # created by another process between our checks and this operation.
+            try:
+                os.link(temporary, output)
+            except FileExistsError as error:
+                raise FileExistsError(error.errno, error.strerror, str(output)) from error
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def cmd_pack(args):

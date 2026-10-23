@@ -1,4 +1,5 @@
 import errno
+import os
 from pathlib import Path
 
 import pytest
@@ -19,14 +20,11 @@ def test_missing_input_is_friendly(tmp_path, capsys, command):
 def test_unwritable_output_is_friendly(tmp_path, capsys, monkeypatch, command):
     source = tmp_path / "source"
     source.write_bytes(b"hello" if command == "pack" else pack(b"hello"))
-    original = Path.open
 
-    def denied(self, mode="r", *args, **kwargs):
-        if mode == "xb":
-            raise PermissionError(errno.EACCES, "permission denied", str(self))
-        return original(self, mode, *args, **kwargs)
+    def denied(*args):
+        raise PermissionError(errno.EACCES, "permission denied")
 
-    monkeypatch.setattr(Path, "open", denied)
+    monkeypatch.setattr(os, "link", denied)
     assert main([command, str(source)]) == 1
     assert "permission denied" in capsys.readouterr().err
 

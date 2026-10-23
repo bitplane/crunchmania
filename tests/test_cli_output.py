@@ -45,3 +45,27 @@ def test_cli_output_limit(tmp_path, capsys):
     assert not source.with_suffix("").exists()
     assert main(["unpack", str(source), "--max-output-size", "5"]) == 0
     assert source.with_suffix("").read_bytes() == b"hello"
+
+
+@pytest.mark.parametrize("force", [False, True])
+def test_failed_write_does_not_publish_partial_output(tmp_path, monkeypatch, capsys, force):
+    import errno
+    import os
+
+    source = tmp_path / "input.bin"
+    source.write_bytes(b"hello")
+    output = source.with_suffix(".crm")
+    if force:
+        output.write_bytes(b"previous archive")
+
+    def full_disk(*args):
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(os, "fsync", full_disk)
+    assert main(["pack", str(source)] + (["--force"] if force else [])) == 1
+    assert "No space left" in capsys.readouterr().err
+    if force:
+        assert output.read_bytes() == b"previous archive"
+    else:
+        assert not output.exists()
+    assert not list(tmp_path.glob(".crunchmania-*"))
