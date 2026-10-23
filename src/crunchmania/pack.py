@@ -184,6 +184,8 @@ def _find_match(data: bytearray, pos: int, hash_chains: dict, size: int) -> tupl
 def pack(data: bytes | bytearray, sampled: bool = False) -> bytes:
     """Compress data using Crunch-Mania standard mode (CrM!/Crm!)."""
     raw_size = len(data)
+    if not raw_size:
+        raise ValueError("cannot pack empty input")
 
     if sampled:
         forward = _apply_inverse_delta(data)

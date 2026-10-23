@@ -27,3 +27,11 @@ def test_same_input_and_output_rejected(tmp_path):
     source.write_bytes(b"original")
     assert main(["pack", str(source), str(source)]) == 1
     assert source.read_bytes() == b"original"
+
+
+def test_empty_pack_does_not_create_output(tmp_path, capsys):
+    source = tmp_path / "empty"
+    source.touch()
+    assert main(["pack", str(source)]) == 1
+    assert "empty input" in capsys.readouterr().err
+    assert not source.with_suffix(".crm").exists()

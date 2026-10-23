@@ -16,7 +16,11 @@ def _write_output(output: Path, data: bytes, force: bool):
 def cmd_pack(args):
     data = args.input.read_bytes()
 
-    result = pack(data, sampled=args.sampled)
+    try:
+        result = pack(data, sampled=args.sampled)
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
 
     output = args.output
     if output is None:

@@ -96,3 +96,9 @@ def test_ancient_reads_our_output(filename, tmp_path):
 
     ancient_result = ancient_decompress(str(packed_path), tmp_path)
     assert ancient_result == decompressed
+
+
+@pytest.mark.parametrize("sampled", [False, True])
+def test_empty_input_rejected(sampled):
+    with pytest.raises(ValueError, match="empty input"):
+        pack(b"", sampled=sampled)
