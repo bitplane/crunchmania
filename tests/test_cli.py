@@ -62,3 +62,16 @@ def test_aliases(tmp_path):
     rc = main(["u", str(DATA_DIR / "DECK2prefs"), str(output)])
     assert rc == 0
     assert output.exists()
+
+
+def test_scan_multiple_embedded_blocks(tmp_path, capsys):
+    from crunchmania import pack
+
+    block = pack(b"hello")
+    source = tmp_path / "disk"
+    source.write_bytes(b"prefix" + block + b"gap" + block + b"CrM!")
+    assert main(["scan", str(source)]) == 0
+    output = capsys.readouterr().out
+    assert "offset 0x00000006" in output
+    assert f"offset 0x{9 + len(block):08X}" in output
+    assert "2 CrM block(s) found" in output

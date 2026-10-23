@@ -88,3 +88,8 @@ def test_mutable_input(filename):
     assert parse_header(mutable) == parse_header(data)
     assert unpack(mutable) == unpack(data)
     assert mutable == data
+
+
+def test_memoryview_header():
+    data = (DATA_DIR / "test_C1.crm").read_bytes()
+    assert parse_header(memoryview(data)) == parse_header(data)

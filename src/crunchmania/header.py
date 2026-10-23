@@ -13,7 +13,7 @@ class CrmHeader:
     packed_size: int
 
 
-def parse_header(data: bytes | bytearray) -> CrmHeader:
+def parse_header(data: bytes | bytearray | memoryview) -> CrmHeader:
     if len(data) < HEADER_SIZE:
         raise ValueError(f"data too short for CrM header: {len(data)} < {HEADER_SIZE}")
 

@@ -81,11 +81,12 @@ ALL_MAGICS = set(MAGIC_IDS) | set(CLONE_IDS)
 def cmd_scan(args):
     data = args.input.read_bytes()
     found = 0
+    view = memoryview(data)
 
     for i in range(len(data) - HEADER_SIZE + 1):
         if data[i : i + 4] in ALL_MAGICS:
             try:
-                header = parse_header(data[i:])
+                header = parse_header(view[i:])
                 mode = "LZH" if header.is_lzh else "std"
                 delta = "+delta" if header.is_sampled else ""
                 print(f"  offset 0x{i:08X}: {mode}{delta}, {header.packed_size} -> {header.unpacked_size} bytes")
