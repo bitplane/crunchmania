@@ -52,3 +52,23 @@ def test_lzh_must_fill_exact_declared_size(filename, change):
 def test_corrupt_fixture_rejected():
     with pytest.raises(ValueError):
         unpack((DATA_DIR / "031").read_bytes())
+
+
+def test_truncated_stream_cannot_consume_zero_padding():
+    data = bytes.fromhex("43724d2100000000011700000007bffc8300000000")
+    with pytest.raises(ValueError, match="ended unexpectedly"):
+        unpack(data)
+
+
+@pytest.mark.parametrize("size", range(1, 6))
+def test_payload_requires_complete_trailer(size):
+    data = struct.pack(">4sHII", b"CrM!", 0, 1, size) + bytes(size)
+    with pytest.raises(ValueError, match="trailer"):
+        parse_header(data)
+
+
+@pytest.mark.parametrize("shift", [17, 65535])
+def test_invalid_trailer_shift(shift):
+    data = struct.pack(">4sHIIIH", b"CrM!", 0, 1, 6, 0, shift)
+    with pytest.raises(ValueError, match="trailer shift"):
+        unpack(data)

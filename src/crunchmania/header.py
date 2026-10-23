@@ -33,6 +33,9 @@ def parse_header(data: bytes | bytearray) -> CrmHeader:
     if not packed_size:
         raise ValueError("packed size is zero")
 
+    if packed_size < 6:
+        raise ValueError("packed data too short for six-byte trailer")
+
     if len(data) < HEADER_SIZE + packed_size:
         raise ValueError(f"data too short: {len(data)} < {HEADER_SIZE + packed_size}")
 

@@ -137,14 +137,10 @@ def _read_huffman_table(reader: BackwardBitReader, code_length: int) -> tuple[li
 
 def _decode_huffman(reader: BackwardBitReader, lookup: list[int], max_depth: int) -> int:
     """Decode one symbol using flat lookup table."""
-    bits = reader.read_bits(max_depth)
+    bits = reader.peek_bits(max_depth)
     entry = lookup[bits]
-    # Put back the unused bits
     depth = entry & 0xF
-    unused = max_depth - depth
-    if unused:
-        reader.accumulator = (reader.accumulator << unused) | (bits >> depth)
-        reader.bits_left += unused
+    reader.read_bits(depth)
     return entry >> 4
 
 
