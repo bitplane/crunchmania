@@ -8,6 +8,11 @@ from crunchmania.pack import pack
 from crunchmania.unpack import unpack
 
 
+def _write_output(output: Path, data: bytes, force: bool):
+    with output.open("wb" if force else "xb") as file:
+        file.write(data)
+
+
 def cmd_pack(args):
     data = args.input.read_bytes()
 
@@ -19,7 +24,7 @@ def cmd_pack(args):
         if output == args.input:
             output = args.input.with_suffix(".crm.packed")
 
-    output.write_bytes(result)
+    _write_output(output, result, args.force)
     print(f"packed {len(data)} -> {len(result)} bytes to {output}")
     return 0
 
@@ -39,7 +44,7 @@ def cmd_unpack(args):
         if output == args.input:
             output = args.input.with_suffix(".unpacked")
 
-    output.write_bytes(result)
+    _write_output(output, result, args.force)
     print(f"unpacked {len(data)} -> {len(result)} bytes to {output}")
     return 0
 
@@ -102,11 +107,13 @@ def main(argv=None):
     p_pack.add_argument("input", type=Path, help="input file")
     p_pack.add_argument("output", type=Path, nargs="?", help="output file")
     p_pack.add_argument("--sampled", action="store_true", help="use delta encoding")
+    p_pack.add_argument("-f", "--force", action="store_true", help="overwrite an existing output file")
     p_pack.set_defaults(func=cmd_pack)
 
     p_unpack = sub.add_parser("unpack", aliases=["u"], help="decompress a file")
     p_unpack.add_argument("input", type=Path, help="input file")
     p_unpack.add_argument("output", type=Path, nargs="?", help="output file")
+    p_unpack.add_argument("-f", "--force", action="store_true", help="overwrite an existing output file")
     p_unpack.set_defaults(func=cmd_unpack)
 
     p_info = sub.add_parser("info", aliases=["i"], help="show file info")
@@ -123,7 +130,11 @@ def main(argv=None):
         parser.print_help()
         return 1
 
-    return args.func(args)
+    try:
+        return args.func(args)
+    except FileExistsError as e:
+        print(f"error: output already exists: {e.filename}; use --force to overwrite", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
