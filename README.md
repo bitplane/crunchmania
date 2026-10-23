@@ -70,6 +70,10 @@ Without an output path, `pack` replaces the input suffix with `.crm`; `unpack`
 removes the suffix. If that would name the input itself, a different suffix is
 used. Empty input cannot be packed.
 
+Failed writes preserve existing output files. On filesystems without hard-link
+support, a new destination may briefly appear empty while it is reserved for
+publication; wait for the command to finish before reading its output.
+
 Decompression defaults to a 64 MiB output limit. Increase it explicitly for
 larger archives, or use `--max-output-size 0` to disable it for trusted input.
 Negative limits are rejected. For example:

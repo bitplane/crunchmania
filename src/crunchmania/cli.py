@@ -1,4 +1,5 @@
 import argparse
+import errno
 import os
 import secrets
 import stat
@@ -36,6 +37,20 @@ def _write_output(output: Path, data: bytes, force: bool):
                 os.link(temporary, output)
             except FileExistsError as error:
                 raise FileExistsError(error.errno, error.strerror, str(output)) from error
+            except OSError as error:
+                if error.errno not in (errno.EPERM, errno.ENOTSUP, errno.EOPNOTSUPP, errno.ENOSYS):
+                    raise
+                # FAT and some network filesystems cannot link. Reserve the
+                # name exclusively, then replace our empty placeholder.
+                reserved = False
+                try:
+                    with output.open("xb"):
+                        reserved = True
+                    os.replace(temporary, output)
+                except BaseException:
+                    if reserved:
+                        output.unlink(missing_ok=True)
+                    raise
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)

@@ -1,3 +1,4 @@
+import errno
 import os
 import stat
 import subprocess
@@ -119,3 +120,38 @@ def test_force_preserves_existing_permissions(tmp_path, mode):
     output.chmod(mode)
     assert main(["pack", str(source), "--force"]) == 0
     assert stat.S_IMODE(output.stat().st_mode) == mode
+
+
+@pytest.mark.parametrize("error_code", [errno.EPERM, errno.ENOTSUP, errno.ENOSYS])
+def test_output_on_filesystem_without_hardlinks(tmp_path, monkeypatch, error_code):
+    source = tmp_path / "input.bin"
+    source.write_bytes(b"hello")
+
+    def unsupported(*args):
+        raise OSError(error_code, "hard links unavailable")
+
+    monkeypatch.setattr(os, "link", unsupported)
+    assert main(["pack", str(source)]) == 0
+    output = source.with_suffix(".crm")
+    assert unpack(output.read_bytes()) == b"hello"
+    previous = output.read_bytes()
+    assert main(["pack", str(source)]) == 1
+    assert output.read_bytes() == previous
+    assert not list(tmp_path.glob(".crunchmania-*"))
+
+
+def test_failed_fallback_publish_removes_reservation(tmp_path, monkeypatch):
+    source = tmp_path / "input.bin"
+    source.write_bytes(b"hello")
+
+    def unsupported(*args):
+        raise OSError(errno.ENOTSUP, "hard links unavailable")
+
+    def failed_replace(*args):
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(os, "link", unsupported)
+    monkeypatch.setattr(os, "replace", failed_replace)
+    assert main(["pack", str(source)]) == 1
+    assert not source.with_suffix(".crm").exists()
+    assert not list(tmp_path.glob(".crunchmania-*"))
