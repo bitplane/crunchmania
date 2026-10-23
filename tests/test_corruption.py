@@ -93,20 +93,21 @@ def test_oversubscribed_huffman_table_rejected():
 @pytest.mark.parametrize("depth", [1, 15])
 def test_undefined_huffman_code_rejected(depth):
     from crunchmania.bitreader import BackwardBitReader
-    from crunchmania.unpack import _decode_huffman
+    from crunchmania.unpack import _HuffmanTable, _decode_huffman
 
     reader = BackwardBitReader(bytes(6), 0, 0)
     with pytest.raises(ValueError, match="undefined"):
-        _decode_huffman(reader, [-1] * (1 << depth), depth)
+        bits = min(depth, 8)
+        _decode_huffman(reader, _HuffmanTable([-1] * (1 << bits), {}, bits), depth)
 
 
 def test_short_huffman_code_at_end_of_input():
     from crunchmania.bitreader import BackwardBitReader
-    from crunchmania.unpack import _decode_huffman
+    from crunchmania.unpack import _HuffmanTable, _decode_huffman
 
     reader = BackwardBitReader(bytes(6), 0, 0)
     reader.read_bits(15)
-    assert _decode_huffman(reader, [0x1411, -1] * 4, 3) == 0x141
+    assert _decode_huffman(reader, _HuffmanTable([0x1411, -1] * 4, {}, 3), 3) == 0x141
     with pytest.raises(ValueError, match="ended unexpectedly"):
         reader.read_bit()
 
@@ -160,3 +161,30 @@ def test_literal_only_lzh_accepts_unused_empty_distance_table(magic, expected, t
         path = tmp_path / "literal.crm"
         path.write_bytes(data)
         assert ancient_decompress(str(path), tmp_path) == expected
+
+
+@pytest.mark.parametrize("depth", [8, 9, 15])
+def test_long_huffman_codes(depth, tmp_path):
+    stream = _Stream()
+    stream.write_bits(depth, 4)
+    for i in range(depth):
+        stream.write_bits(1 if i in (0, depth - 1) else 0, min(i + 1, 9))
+    stream.write_bits(0x141, 9)
+    stream.write_bits(0x142, 9)
+    stream.write_bits(1, 4)  # unused empty distance table
+    stream.write_bit(0)
+    stream.write_bits(2, 16)  # three items
+    stream.write_bit(0)  # A, short code
+    stream.write_bits(1, depth)  # B, long code
+    stream.write_bits(1, depth)  # B, long code
+    stream.write_bit(0)
+    data = crm_stream(stream, 3, b"CrM2")
+    assert unpack(data) == b"BBA"
+    if HAS_ANCIENT:
+        path = tmp_path / "long.crm"
+        path.write_bytes(data)
+        assert ancient_decompress(str(path), tmp_path) == b"BBA"
+
+
+def test_large_declared_huffman_depth_with_short_code():
+    assert unpack(literal_lzh_stream(table_depth=15)) == b"AAAA"

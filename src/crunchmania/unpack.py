@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from crunchmania.bitreader import BackwardBitReader
 from crunchmania.constants import (
     DISTANCE_BITS,
@@ -102,11 +104,18 @@ def _bit_reverse(value: int, bits: int) -> int:
     return result
 
 
-def _read_huffman_table(reader: BackwardBitReader, code_length: int) -> tuple[list[int], int]:
+@dataclass
+class _HuffmanTable:
+    short: list[int]
+    long: dict[tuple[int, int], int]
+    prefix_bits: int
+
+
+def _read_huffman_table(reader: BackwardBitReader, code_length: int) -> tuple[_HuffmanTable, int]:
     """Read a dynamic Huffman table for LZH mode.
 
-    Returns (lookup_table, max_depth) where lookup_table[read_bits(max_depth)]
-    gives value << 4 | depth.
+    Use at most 256 prefix entries, with sparse entries for longer codes.
+    This bounds construction work even for many tiny depth-15 blocks.
     """
     max_depth = reader.read_bits(4)
     if not max_depth:
@@ -120,10 +129,10 @@ def _read_huffman_table(reader: BackwardBitReader, code_length: int) -> tuple[li
     if code_length == 9 and not any(level_counts):
         raise ValueError("LZH huffman table is empty")
 
-    # Build flat lookup table indexed by LSB-first bit patterns from read_bits().
-    # Canonical codes are MSB-first, so we bit-reverse them for the lookup index.
+    # Canonical codes are MSB-first, whereas the reader returns LSB-first bits.
     table_size = 1 << max_depth
-    lookup = [-1] * table_size
+    prefix_bits = min(max_depth, 8)
+    lookup = _HuffmanTable([-1] * (1 << prefix_bits), {}, prefix_bits)
 
     code = 0
     for depth_idx in range(max_depth):
@@ -135,22 +144,31 @@ def _read_huffman_table(reader: BackwardBitReader, code_length: int) -> tuple[li
             value = reader.read_bits(code_length)
             canonical = code >> pad_bits
             reversed_code = _bit_reverse(canonical, depth)
-            for suffix in range(1 << pad_bits):
-                lookup[reversed_code | (suffix << depth)] = value << 4 | depth
+            if depth <= prefix_bits:
+                for suffix in range(1 << (prefix_bits - depth)):
+                    lookup.short[reversed_code | (suffix << depth)] = value << 4 | depth
+            else:
+                lookup.long[depth, reversed_code] = value
             code += 1 << pad_bits
 
     return lookup, max_depth
 
 
-def _decode_huffman(reader: BackwardBitReader, lookup: list[int], max_depth: int) -> int:
-    """Decode one symbol using flat lookup table."""
-    bits = reader.peek_bits(max_depth)
-    entry = lookup[bits]
-    if entry < 0:
-        raise ValueError("undefined LZH huffman code")
-    depth = entry & 0xF
-    reader.read_bits(depth)
-    return entry >> 4
+def _decode_huffman(reader: BackwardBitReader, lookup: _HuffmanTable, max_depth: int) -> int:
+    """Decode short codes directly and extend longer codes one bit at a time."""
+    bits = reader.peek_bits(lookup.prefix_bits)
+    entry = lookup.short[bits]
+    if entry >= 0:
+        reader.read_bits(entry & 0xF)
+        return entry >> 4
+
+    bits = reader.read_bits(lookup.prefix_bits)
+    for depth in range(lookup.prefix_bits + 1, max_depth + 1):
+        bits |= reader.read_bit() << (depth - 1)
+        value = lookup.long.get((depth, bits))
+        if value is not None:
+            return value
+    raise ValueError("undefined LZH huffman code")
 
 
 def _unpack_lzh(reader: BackwardBitReader, raw_size: int) -> bytearray:
