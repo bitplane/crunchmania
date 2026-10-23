@@ -2,7 +2,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from crunchmania.constants import HEADER_SIZE, MAGIC_IDS, CLONE_IDS
+from crunchmania.constants import CLONE_IDS, HEADER_SIZE, MAGIC_IDS
 from crunchmania.header import parse_header
 from crunchmania.pack import pack
 from crunchmania.unpack import DEFAULT_MAX_OUTPUT_SIZE, unpack
@@ -16,11 +16,7 @@ def _write_output(output: Path, data: bytes, force: bool):
 def cmd_pack(args):
     data = args.input.read_bytes()
 
-    try:
-        result = pack(data, sampled=args.sampled)
-    except ValueError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return 1
+    result = pack(data, sampled=args.sampled)
 
     output = args.output
     if output is None:
@@ -36,11 +32,7 @@ def cmd_pack(args):
 def cmd_unpack(args):
     data = args.input.read_bytes()
 
-    try:
-        result = unpack(data, max_output_size=args.max_output_size)
-    except ValueError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return 1
+    result = unpack(data, max_output_size=args.max_output_size)
 
     output = args.output
     if output is None:
@@ -56,11 +48,7 @@ def cmd_unpack(args):
 def cmd_info(args):
     data = args.input.read_bytes()
 
-    try:
-        header = parse_header(data)
-    except ValueError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return 1
+    header = parse_header(data)
 
     mode = "LZH" if header.is_lzh else "standard"
     delta = " + delta" if header.is_sampled else ""
@@ -104,7 +92,7 @@ def cmd_scan(args):
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="crunchmania",
-        description="Crunch-Mania decompression tool",
+        description="Crunch-Mania compression and decompression tool",
     )
     sub = parser.add_subparsers(dest="command")
 
@@ -145,6 +133,12 @@ def main(argv=None):
         return args.func(args)
     except FileExistsError as e:
         print(f"error: output already exists: {e.filename}; use --force to overwrite", file=sys.stderr)
+        return 1
+    except (OSError, ValueError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    except MemoryError:
+        print("error: insufficient memory to process file", file=sys.stderr)
         return 1
 
 
