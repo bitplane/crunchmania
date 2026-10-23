@@ -133,7 +133,10 @@ def cmd_scan(args):
 
 
 def _output_limit(value: str) -> int | None:
-    limit = int(value)
+    try:
+        limit = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("output limit must be an integer number of bytes") from error
     if limit < 0:
         raise argparse.ArgumentTypeError("output limit must be nonnegative; use 0 for no limit")
     return limit or None

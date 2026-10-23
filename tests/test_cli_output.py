@@ -89,7 +89,10 @@ def test_cli_invalid_output_limit(tmp_path, capsys, value):
     with pytest.raises(SystemExit) as error:
         main(["unpack", str(tmp_path / "input.crm"), "--max-output-size", value])
     assert error.value.code == 2
-    assert "--max-output-size" in capsys.readouterr().err
+    message = capsys.readouterr().err
+    assert "--max-output-size" in message
+    assert "_output_limit" not in message
+    assert ("nonnegative" if value == "-1" else "integer number of bytes") in message
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX permission semantics")
