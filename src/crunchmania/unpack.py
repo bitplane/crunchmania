@@ -46,6 +46,17 @@ def _decode_distance_index(reader: BackwardBitReader) -> int:
     return 2
 
 
+def _copy_match(output: bytearray, pos: int, count: int, distance: int) -> int:
+    if count > pos:
+        raise ValueError("match exceeds remaining output size")
+    if not 1 <= distance <= len(output) - pos:
+        raise ValueError("match distance references undecoded data")
+    for _ in range(count):
+        pos -= 1
+        output[pos] = output[pos + distance]
+    return pos
+
+
 def _unpack_standard(reader: BackwardBitReader, raw_size: int) -> bytearray:
     output = bytearray(raw_size)
     pos = raw_size
@@ -64,6 +75,8 @@ def _unpack_standard(reader: BackwardBitReader, raw_size: int) -> bytearray:
                     n = reader.read_bits(5) + 15
                 else:
                     n = reader.read_bits(14) + 15
+                if n > pos:
+                    raise ValueError("literal run exceeds remaining output size")
                 for _ in range(n):
                     pos -= 1
                     output[pos] = reader.read_bits(8)
@@ -74,9 +87,7 @@ def _unpack_standard(reader: BackwardBitReader, raw_size: int) -> bytearray:
                 distance_index = _decode_distance_index(reader)
                 distance = _vlc_decode(reader, DISTANCE_BITS, DISTANCE_OFFSETS, distance_index)
 
-                for _ in range(count):
-                    pos -= 1
-                    output[pos] = output[pos + distance]
+                pos = _copy_match(output, pos, count, distance)
 
     return output
 
@@ -150,6 +161,8 @@ def _unpack_lzh(reader: BackwardBitReader, raw_size: int) -> bytearray:
             value = _decode_huffman(reader, length_lookup, length_depth)
 
             if value & 0x100:
+                if not pos:
+                    raise ValueError("literal exceeds remaining output size")
                 pos -= 1
                 output[pos] = value & 0xFF
             else:
@@ -161,13 +174,13 @@ def _unpack_lzh(reader: BackwardBitReader, raw_size: int) -> bytearray:
                 else:
                     distance = (reader.read_bits(distance_bits) | (1 << distance_bits)) + 1
 
-                for _ in range(count):
-                    pos -= 1
-                    output[pos] = output[pos + distance]
+                pos = _copy_match(output, pos, count, distance)
 
         if not reader.read_bit():
             break
 
+    if pos:
+        raise ValueError("LZH stream ended before filling output")
     return output
 
 
