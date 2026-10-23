@@ -71,7 +71,8 @@ removes the suffix. If that would name the input itself, a different suffix is
 used. Empty input cannot be packed.
 
 Decompression defaults to a 64 MiB output limit. Increase it explicitly for
-larger archives, for example:
+larger archives, or use `--max-output-size 0` to disable it for trusted input.
+Negative limits are rejected. For example:
 
 ```bash
 crunchmania unpack large.crm output.bin --max-output-size 134217728

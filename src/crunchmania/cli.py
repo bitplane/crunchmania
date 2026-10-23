@@ -108,6 +108,13 @@ def cmd_scan(args):
     return 0
 
 
+def _output_limit(value: str) -> int | None:
+    limit = int(value)
+    if limit < 0:
+        raise argparse.ArgumentTypeError("output limit must be nonnegative; use 0 for no limit")
+    return limit or None
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="crunchmania",
@@ -128,9 +135,9 @@ def main(argv=None):
     p_unpack.add_argument("-f", "--force", action="store_true", help="overwrite an existing output file")
     p_unpack.add_argument(
         "--max-output-size",
-        type=int,
+        type=_output_limit,
         default=DEFAULT_MAX_OUTPUT_SIZE,
-        help="maximum decoded bytes (default: 67108864); increase for larger files",
+        help="maximum decoded bytes (default: 67108864); 0 disables the limit for trusted input",
     )
     p_unpack.set_defaults(func=cmd_unpack)
 

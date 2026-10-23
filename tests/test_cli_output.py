@@ -69,3 +69,18 @@ def test_failed_write_does_not_publish_partial_output(tmp_path, monkeypatch, cap
     else:
         assert not output.exists()
     assert not list(tmp_path.glob(".crunchmania-*"))
+
+
+def test_cli_unlimited_output(tmp_path):
+    source = tmp_path / "input.crm"
+    source.write_bytes(pack(b"hello"))
+    assert main(["unpack", str(source), "--max-output-size", "0"]) == 0
+    assert source.with_suffix("").read_bytes() == b"hello"
+
+
+@pytest.mark.parametrize("value", ["-1", "invalid"])
+def test_cli_invalid_output_limit(tmp_path, capsys, value):
+    with pytest.raises(SystemExit) as error:
+        main(["unpack", str(tmp_path / "input.crm"), "--max-output-size", value])
+    assert error.value.code == 2
+    assert "--max-output-size" in capsys.readouterr().err
