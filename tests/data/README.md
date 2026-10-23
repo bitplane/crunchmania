@@ -9,3 +9,7 @@ format variants:
   `DECK2prefs`, `GAME-OVER.DAWN`, `pubfinale1`, `test_C1_lz.crm`, `vdp15`
 - `Crm!` - Normal mode + delta: `test_C1_delta.crm`
 - `Crm2` - LZH mode + delta: `shnock`, `test_C1_lz_delta.crm`
+
+`sha256.json` records SHA-256 hashes of the decompressed valid fixtures,
+independently generated using Ancient 2.3.0. These checks run even when the
+reference executable is unavailable.

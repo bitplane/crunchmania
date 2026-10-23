@@ -48,7 +48,8 @@ def ancient_decompress(filename: str, tmp_path: Path) -> bytes:
     result = subprocess.run(
         ["ancient", "decompress", str(input_path), str(output_path)],
         capture_output=True,
+        check=False,
     )
     if result.returncode != 0:
-        pytest.skip(f"ancient failed to decompress {filename}")
+        pytest.fail(f"ancient failed to decompress {filename}: {result.stderr.decode(errors='replace')}")
     return output_path.read_bytes()
