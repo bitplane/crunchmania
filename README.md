@@ -48,6 +48,12 @@ pip install crunchmania
 ## CLI usage
 
 ```bash
+# Compress a file (standard mode)
+crunchmania pack input.bin output.crm
+
+# Compress sample data using delta encoding
+crunchmania pack sample.raw sample.crm --sampled
+
 # Show file info
 crunchmania info packed_file.crm
 
@@ -58,10 +64,23 @@ crunchmania unpack packed_file.crm output_file
 crunchmania scan amiga_disk.adf
 ```
 
+Output files are created only when the destination does not already exist.
+Use `--force` (or `-f`) with `pack` or `unpack` to replace an existing file.
+Without an output path, `pack` replaces the input suffix with `.crm`; `unpack`
+removes the suffix. If that would name the input itself, a different suffix is
+used. Empty input cannot be packed.
+
+Decompression defaults to a 64 MiB output limit. Increase it explicitly for
+larger archives, for example:
+
+```bash
+crunchmania unpack large.crm output.bin --max-output-size 134217728
+```
+
 ## Library usage
 
 ```python
-from crunchmania import unpack, parse_header
+from crunchmania import pack, unpack, parse_header
 
 data = open("packed_file.crm", "rb").read()
 
@@ -71,7 +90,19 @@ print(f"{header.magic!r}, {header.packed_size} -> {header.unpacked_size}")
 
 # Decompress
 output = unpack(data)
+
+# Compress nonempty bytes or bytearray input
+compressed = pack(output)
+compressed_sample = pack(output, sampled=True)
+
+# Raise the output limit, or disable it for trusted data with None
+output = unpack(data, max_output_size=128 * 1024 * 1024)
 ```
+
+The compressor writes standard `CrM!` / `Crm!` streams. The decompressor reads
+all four variants. `parse_header()` and `unpack()` accept both `bytes` and
+`bytearray`; header inspection also accepts `memoryview`. Invalid streams,
+empty compression input, and exceeded output limits raise `ValueError`.
 
 ## License
 
