@@ -93,7 +93,7 @@ def test_oversubscribed_huffman_table_rejected():
 @pytest.mark.parametrize("depth", [1, 15])
 def test_undefined_huffman_code_rejected(depth):
     from crunchmania.bitreader import BackwardBitReader
-    from crunchmania.unpack import _HuffmanTable, _decode_huffman
+    from crunchmania.unpack import _decode_huffman, _HuffmanTable
 
     reader = BackwardBitReader(bytes(6), 0, 0)
     with pytest.raises(ValueError, match="undefined"):
@@ -103,7 +103,7 @@ def test_undefined_huffman_code_rejected(depth):
 
 def test_short_huffman_code_at_end_of_input():
     from crunchmania.bitreader import BackwardBitReader
-    from crunchmania.unpack import _HuffmanTable, _decode_huffman
+    from crunchmania.unpack import _decode_huffman, _HuffmanTable
 
     reader = BackwardBitReader(bytes(6), 0, 0)
     reader.read_bits(15)
