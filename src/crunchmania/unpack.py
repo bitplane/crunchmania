@@ -117,7 +117,7 @@ def _read_huffman_table(reader: BackwardBitReader, code_length: int) -> tuple[li
         bits = min(i + 1, code_length)
         level_counts.append(reader.read_bits(bits))
 
-    if not any(level_counts):
+    if code_length == 9 and not any(level_counts):
         raise ValueError("LZH huffman table is empty")
 
     # Build flat lookup table indexed by LSB-first bit patterns from read_bits().

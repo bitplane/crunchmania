@@ -5,7 +5,7 @@ import pytest
 from crunchmania import parse_header, unpack
 from crunchmania.pack import _encode_literal, _encode_match, _Stream
 
-from .conftest import DATA_DIR
+from .conftest import DATA_DIR, HAS_ANCIENT, ancient_decompress
 
 
 def crm_stream(stream, size, magic=b"CrM!"):
@@ -135,3 +135,28 @@ def test_configurable_output_limit():
         unpack(data, max_output_size=4)
     assert unpack(data, max_output_size=5) == b"hello"
     assert unpack(data, max_output_size=None) == b"hello"
+
+
+def literal_lzh_stream(count=4, magic=b"CrM2", table_depth=1):
+    stream = _Stream()
+    stream.write_bits(table_depth, 4)
+    for i in range(table_depth):
+        stream.write_bits(1 if i == 0 else 0, min(i + 1, 9))
+    stream.write_bits(0x141, 9)
+    stream.write_bits(table_depth, 4)
+    for i in range(table_depth):
+        stream.write_bits(0, min(i + 1, 4))
+    stream.write_bits(count - 1, 16)
+    stream.write_bits(0, count)
+    stream.write_bit(0)
+    return crm_stream(stream, count, magic)
+
+
+@pytest.mark.parametrize("magic, expected", [(b"CrM2", b"AAAA"), (b"Crm2", b"A\x82\xc3\x04")])
+def test_literal_only_lzh_accepts_unused_empty_distance_table(magic, expected, tmp_path):
+    data = literal_lzh_stream(magic=magic)
+    assert unpack(data) == expected
+    if HAS_ANCIENT:
+        path = tmp_path / "literal.crm"
+        path.write_bytes(data)
+        assert ancient_decompress(str(path), tmp_path) == expected
