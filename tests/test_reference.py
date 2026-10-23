@@ -22,3 +22,14 @@ def test_reference_rejection_is_a_failure(monkeypatch, tmp_path):
     monkeypatch.setattr(subprocess, "run", reject)
     with pytest.raises(pytest.fail.Exception, match="invalid stream"):
         ancient_decompress("generated.crm", tmp_path)
+
+
+def test_required_reference_cannot_silently_skip(monkeypatch):
+    from . import conftest
+
+    monkeypatch.setattr(conftest, "HAS_ANCIENT", False)
+    monkeypatch.setenv("REQUIRE_ANCIENT", "1")
+    with pytest.raises(pytest.UsageError, match="ancient is not installed"):
+        conftest.pytest_sessionstart(None)
+    monkeypatch.delenv("REQUIRE_ANCIENT")
+    conftest.pytest_sessionstart(None)

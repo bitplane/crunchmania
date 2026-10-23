@@ -1,3 +1,4 @@
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -29,6 +30,11 @@ ALL_FILES = STANDARD_FILES + LZH_FILES + STANDARD_DELTA_FILES + LZH_DELTA_FILES
 CORRUPT_FILES = ["031"]
 
 HAS_ANCIENT = shutil.which("ancient") is not None
+
+
+def pytest_sessionstart(session):
+    if os.environ.get("REQUIRE_ANCIENT") == "1" and not HAS_ANCIENT:
+        raise pytest.UsageError("REQUIRE_ANCIENT=1 but ancient is not installed")
 
 
 @pytest.fixture

@@ -13,3 +13,7 @@ format variants:
 `sha256.json` records SHA-256 hashes of the decompressed valid fixtures,
 independently generated using Ancient 2.3.0. These checks run even when the
 reference executable is unavailable.
+
+CI sets `REQUIRE_ANCIENT=1`, which fails the test session if the reference
+executable is missing. Locally, reference-executable checks may be skipped;
+fixture digest checks always run.
