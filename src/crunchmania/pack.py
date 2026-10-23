@@ -149,8 +149,6 @@ def _find_match(data: bytearray, pos: int, hash_chains: dict, size: int) -> tupl
         steps += 1
 
         dist = pos - candidate
-        if dist > MAX_DISTANCE:
-            break
         if dist <= 0:
             continue
 
