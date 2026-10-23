@@ -77,3 +77,14 @@ def test_corrupt_files_parse_header(filename):
     data = (DATA_DIR / filename).read_bytes()
     header = parse_header(data)
     assert header.unpacked_size > 0
+
+
+@pytest.mark.parametrize("filename", ALL_FILES)
+def test_mutable_input(filename):
+    from crunchmania import unpack
+
+    data = (DATA_DIR / filename).read_bytes()
+    mutable = bytearray(data)
+    assert parse_header(mutable) == parse_header(data)
+    assert unpack(mutable) == unpack(data)
+    assert mutable == data

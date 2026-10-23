@@ -17,7 +17,7 @@ def parse_header(data: bytes | bytearray) -> CrmHeader:
     if len(data) < HEADER_SIZE:
         raise ValueError(f"data too short for CrM header: {len(data)} < {HEADER_SIZE}")
 
-    raw_magic = data[:4]
+    raw_magic = bytes(data[:4])
     magic = CLONE_IDS.get(raw_magic, raw_magic)
 
     if magic not in MAGIC_IDS:
