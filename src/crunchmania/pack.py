@@ -8,7 +8,6 @@ from crunchmania.constants import (
     LENGTH_OFFSETS,
 )
 
-
 MAX_DISTANCE = DISTANCE_OFFSETS[-1] + (1 << DISTANCE_BITS[-1]) - 1
 MAX_MATCH = 278
 MIN_MATCH = 2

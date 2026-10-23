@@ -3,7 +3,7 @@ import struct
 import pytest
 
 from crunchmania import parse_header, unpack
-from crunchmania.pack import _Stream, _encode_literal, _encode_match
+from crunchmania.pack import _encode_literal, _encode_match, _Stream
 
 from .conftest import DATA_DIR
 
