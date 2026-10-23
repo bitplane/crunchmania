@@ -1,7 +1,8 @@
 import argparse
 import os
+import secrets
+import stat
 import sys
-import tempfile
 from pathlib import Path
 
 from crunchmania.constants import CLONE_IDS, HEADER_SIZE, MAGIC_IDS
@@ -13,8 +14,16 @@ from crunchmania.unpack import DEFAULT_MAX_OUTPUT_SIZE, unpack
 def _write_output(output: Path, data: bytes, force: bool):
     temporary = None
     try:
-        with tempfile.NamedTemporaryFile(dir=output.parent, prefix=".crunchmania-", delete=False) as file:
-            temporary = Path(file.name)
+        candidate = output.parent / f".crunchmania-{secrets.token_hex(16)}"
+        with candidate.open("xb") as file:
+            temporary = candidate
+            if force:
+                try:
+                    mode = stat.S_IMODE(output.stat().st_mode)
+                except FileNotFoundError:
+                    pass
+                else:
+                    temporary.chmod(mode)
             file.write(data)
             file.flush()
             os.fsync(file.fileno())

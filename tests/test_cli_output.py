@@ -1,3 +1,8 @@
+import os
+import stat
+import subprocess
+import sys
+
 import pytest
 
 from crunchmania import pack, unpack
@@ -84,3 +89,33 @@ def test_cli_invalid_output_limit(tmp_path, capsys, value):
         main(["unpack", str(tmp_path / "input.crm"), "--max-output-size", value])
     assert error.value.code == 2
     assert "--max-output-size" in capsys.readouterr().err
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permission semantics")
+def test_new_output_respects_umask(tmp_path):
+    source = tmp_path / "input.bin"
+    source.write_bytes(b"hello")
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import os,sys; from crunchmania.cli import main; os.umask(0o027); raise SystemExit(main(sys.argv[1:]))",
+            "pack",
+            str(source),
+        ],
+        capture_output=True,
+        check=True,
+    )
+    assert stat.S_IMODE(source.with_suffix(".crm").stat().st_mode) == 0o640
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permission semantics")
+@pytest.mark.parametrize("mode", [0o640, 0o755])
+def test_force_preserves_existing_permissions(tmp_path, mode):
+    source = tmp_path / "input.bin"
+    source.write_bytes(b"hello")
+    output = source.with_suffix(".crm")
+    output.write_bytes(b"old")
+    output.chmod(mode)
+    assert main(["pack", str(source), "--force"]) == 0
+    assert stat.S_IMODE(output.stat().st_mode) == mode
