@@ -72,3 +72,40 @@ def test_invalid_trailer_shift(shift):
     data = struct.pack(">4sHIIIH", b"CrM!", 0, 1, 6, 0, shift)
     with pytest.raises(ValueError, match="trailer shift"):
         unpack(data)
+
+
+def test_empty_huffman_table_rejected():
+    data = bytes.fromhex("43724d320000000000010000001600000000088000000000000000000000000f00000000")
+    with pytest.raises(ValueError, match="table is empty"):
+        unpack(data)
+
+
+def test_oversubscribed_huffman_table_rejected():
+    stream = _Stream()
+    stream.write_bits(2, 4)
+    stream.write_bits(1, 1)  # one code of length 1
+    stream.write_bits(3, 2)  # three codes of length 2: exceeds available space
+    stream.write_bits(0x141, 9)
+    with pytest.raises(ValueError, match="oversubscribed"):
+        unpack(crm_stream(stream, 1, b"CrM2"))
+
+
+@pytest.mark.parametrize("depth", [1, 15])
+def test_undefined_huffman_code_rejected(depth):
+    from crunchmania.bitreader import BackwardBitReader
+    from crunchmania.unpack import _decode_huffman
+
+    reader = BackwardBitReader(bytes(6), 0, 0)
+    with pytest.raises(ValueError, match="undefined"):
+        _decode_huffman(reader, [-1] * (1 << depth), depth)
+
+
+def test_short_huffman_code_at_end_of_input():
+    from crunchmania.bitreader import BackwardBitReader
+    from crunchmania.unpack import _decode_huffman
+
+    reader = BackwardBitReader(bytes(6), 0, 0)
+    reader.read_bits(15)
+    assert _decode_huffman(reader, [0x1411, -1] * 4, 3) == 0x141
+    with pytest.raises(ValueError, match="ended unexpectedly"):
+        reader.read_bit()

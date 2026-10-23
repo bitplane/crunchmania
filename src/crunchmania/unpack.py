@@ -115,6 +115,9 @@ def _read_huffman_table(reader: BackwardBitReader, code_length: int) -> tuple[li
         bits = min(i + 1, code_length)
         level_counts.append(reader.read_bits(bits))
 
+    if not any(level_counts):
+        raise ValueError("LZH huffman table is empty")
+
     # Build flat lookup table indexed by LSB-first bit patterns from read_bits().
     # Canonical codes are MSB-first, so we bit-reverse them for the lookup index.
     table_size = 1 << max_depth
@@ -124,6 +127,8 @@ def _read_huffman_table(reader: BackwardBitReader, code_length: int) -> tuple[li
     for depth_idx in range(max_depth):
         depth = depth_idx + 1
         pad_bits = max_depth - depth
+        if code + (level_counts[depth_idx] << pad_bits) > table_size:
+            raise ValueError("LZH huffman table is oversubscribed")
         for _ in range(level_counts[depth_idx]):
             value = reader.read_bits(code_length)
             canonical = code >> pad_bits
@@ -139,6 +144,8 @@ def _decode_huffman(reader: BackwardBitReader, lookup: list[int], max_depth: int
     """Decode one symbol using flat lookup table."""
     bits = reader.peek_bits(max_depth)
     entry = lookup[bits]
+    if entry < 0:
+        raise ValueError("undefined LZH huffman code")
     depth = entry & 0xF
     reader.read_bits(depth)
     return entry >> 4
