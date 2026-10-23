@@ -35,3 +35,13 @@ def test_empty_pack_does_not_create_output(tmp_path, capsys):
     assert main(["pack", str(source)]) == 1
     assert "empty input" in capsys.readouterr().err
     assert not source.with_suffix(".crm").exists()
+
+
+def test_cli_output_limit(tmp_path, capsys):
+    source = tmp_path / "input.crm"
+    source.write_bytes(pack(b"hello"))
+    assert main(["unpack", str(source), "--max-output-size", "4"]) == 1
+    assert "output limit" in capsys.readouterr().err
+    assert not source.with_suffix("").exists()
+    assert main(["unpack", str(source), "--max-output-size", "5"]) == 0
+    assert source.with_suffix("").read_bytes() == b"hello"

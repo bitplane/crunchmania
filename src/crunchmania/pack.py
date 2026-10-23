@@ -1,4 +1,5 @@
 import struct
+from collections import deque
 
 from crunchmania.constants import (
     DISTANCE_BITS,
@@ -25,37 +26,29 @@ class _Stream:
     """
 
     def __init__(self):
-        self._bits = bytearray()
+        self._bytes = bytearray()
+        self._accumulator = 0
+        self._bit_count = 0
 
     def write_bit(self, value: int):
-        self._bits.append(value & 1)
+        self.write_bits(value, 1)
 
     def write_bits(self, value: int, count: int):
-        for i in range(count):
-            self._bits.append((value >> i) & 1)
+        self._accumulator |= (value & ((1 << count) - 1)) << self._bit_count
+        self._bit_count += count
+        while self._bit_count >= 8:
+            self._bytes.append(self._accumulator & 0xFF)
+            self._accumulator >>= 8
+            self._bit_count -= 8
 
     def finalize(self) -> bytes:
-        bits = self._bits
-        while len(bits) < 16:
-            bits.append(0)
-        while len(bits) % 8:
-            bits.append(0)
-
-        acc16 = 0
-        for i in range(16):
-            acc16 |= bits[i] << i
-        buf_content = acc16 << 16
-
-        rest = bits[16:]
-        nbytes = len(rest) // 8
-        body = bytearray(nbytes)
-        for k in range(nbytes):
-            v = 0
-            for i in range(8):
-                v |= rest[8 * k + i] << i
-            body[nbytes - 1 - k] = v
-
-        return bytes(body) + struct.pack(">IH", buf_content, 0)
+        data = self._bytes.copy()
+        if self._bit_count:
+            data.append(self._accumulator)
+        while len(data) < 2:
+            data.append(0)
+        acc16 = data[0] | (data[1] << 8)
+        return bytes(reversed(data[2:])) + struct.pack(">IH", acc16 << 16, 0)
 
 
 def _vlc_index(value: int, bits_table: tuple, offset_table: tuple) -> int:
@@ -187,18 +180,13 @@ def pack(data: bytes | bytearray, sampled: bool = False) -> bytes:
     if not raw_size:
         raise ValueError("cannot pack empty input")
 
-    if sampled:
-        forward = _apply_inverse_delta(data)
-    else:
-        forward = bytearray(data)
-
-    # The decoder fills its output buffer from the highest index down, so the
-    # first decoded decision describes the tail of the file. Equivalently, we
-    # run forward LZ77 on the reversed buffer and emit decisions in scan order.
-    work = bytearray(reversed(forward))
+    # Decoding proceeds backward; match against the reversed input.
+    work = _apply_inverse_delta(data) if sampled else bytearray(data)
+    work.reverse()
 
     stream = _Stream()
-    hash_chains: dict[int, list[int]] = {}
+    hash_chains: dict[int, deque[int]] = {}
+    window: deque[int] = deque()
     pos = 0
 
     while pos < raw_size:
@@ -213,7 +201,17 @@ def pack(data: bytes | bytearray, sampled: bool = False) -> bytes:
         end_insert = min(pos + step, raw_size - 2)
         for i in range(pos, end_insert):
             h = (work[i] << 16) | (work[i + 1] << 8) | work[i + 2]
-            hash_chains.setdefault(h, []).append(i)
+            chain = hash_chains.get(h)
+            if chain is None:
+                chain = hash_chains[h] = deque()
+            chain.append(i)
+            window.append(h)
+            if len(window) > MAX_DISTANCE:
+                old_hash = window.popleft()
+                old_chain = hash_chains[old_hash]
+                old_chain.popleft()
+                if not old_chain:
+                    del hash_chains[old_hash]
 
         pos += step
 

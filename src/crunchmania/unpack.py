@@ -8,6 +8,8 @@ from crunchmania.constants import (
 )
 from crunchmania.header import parse_header
 
+DEFAULT_MAX_OUTPUT_SIZE = 64 * 1024 * 1024
+
 
 def _vlc_decode(reader: BackwardBitReader, bits_table: tuple, offset_table: tuple, index: int) -> int:
     return reader.read_bits(bits_table[index]) + offset_table[index]
@@ -195,11 +197,12 @@ def _apply_delta(data: bytearray) -> bytearray:
     return data
 
 
-def unpack(data: bytes | bytearray) -> bytes:
+def unpack(data: bytes | bytearray, *, max_output_size: int | None = DEFAULT_MAX_OUTPUT_SIZE) -> bytes:
     """Decompress Crunch-Mania compressed data.
 
     Args:
         data: raw file data starting with CrM header
+        max_output_size: maximum decoded bytes (64 MiB by default); None disables the limit
 
     Returns:
         decompressed data as bytes
@@ -208,6 +211,8 @@ def unpack(data: bytes | bytearray) -> bytes:
         ValueError: on invalid header or corrupt data
     """
     header = parse_header(data)
+    if max_output_size is not None and header.unpacked_size > max_output_size:
+        raise ValueError(f"unpacked size {header.unpacked_size} exceeds output limit {max_output_size}")
 
     reader = BackwardBitReader(
         data,

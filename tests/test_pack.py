@@ -102,3 +102,28 @@ def test_ancient_reads_our_output(filename, tmp_path):
 def test_empty_input_rejected(sampled):
     with pytest.raises(ValueError, match="empty input"):
         pack(b"", sampled=sampled)
+
+
+@pytest.mark.parametrize("sampled", [False, True])
+def test_match_window_remains_bounded(monkeypatch, sampled):
+    import importlib
+    import random
+
+    module = importlib.import_module("crunchmania.pack")
+    original = module._find_match
+    peak = 0
+
+    def check_window(data, pos, chains, size):
+        nonlocal peak
+        # Check periodically to avoid making the regression test quadratic.
+        if pos % 4096 == 0:
+            count = sum(len(chain) for chain in chains.values())
+            peak = max(peak, count)
+            assert count <= module.MAX_DISTANCE
+            assert all(chain[0] >= pos - module.MAX_DISTANCE for chain in chains.values())
+        return original(data, pos, chains, size)
+
+    monkeypatch.setattr(module, "_find_match", check_window)
+    data = random.Random(42).randbytes(module.MAX_DISTANCE * 3)
+    assert unpack(pack(data, sampled=sampled)) == data
+    assert peak > 0

@@ -5,7 +5,7 @@ from pathlib import Path
 from crunchmania.constants import HEADER_SIZE, MAGIC_IDS, CLONE_IDS
 from crunchmania.header import parse_header
 from crunchmania.pack import pack
-from crunchmania.unpack import unpack
+from crunchmania.unpack import DEFAULT_MAX_OUTPUT_SIZE, unpack
 
 
 def _write_output(output: Path, data: bytes, force: bool):
@@ -37,7 +37,7 @@ def cmd_unpack(args):
     data = args.input.read_bytes()
 
     try:
-        result = unpack(data)
+        result = unpack(data, max_output_size=args.max_output_size)
     except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
@@ -88,7 +88,7 @@ def cmd_scan(args):
                 header = parse_header(data[i:])
                 mode = "LZH" if header.is_lzh else "std"
                 delta = "+delta" if header.is_sampled else ""
-                print(f"  offset 0x{i:08X}: {mode}{delta}, " f"{header.packed_size} -> {header.unpacked_size} bytes")
+                print(f"  offset 0x{i:08X}: {mode}{delta}, {header.packed_size} -> {header.unpacked_size} bytes")
                 found += 1
             except ValueError:
                 pass
@@ -118,6 +118,12 @@ def main(argv=None):
     p_unpack.add_argument("input", type=Path, help="input file")
     p_unpack.add_argument("output", type=Path, nargs="?", help="output file")
     p_unpack.add_argument("-f", "--force", action="store_true", help="overwrite an existing output file")
+    p_unpack.add_argument(
+        "--max-output-size",
+        type=int,
+        default=DEFAULT_MAX_OUTPUT_SIZE,
+        help="maximum decoded bytes (default: 67108864); increase for larger files",
+    )
     p_unpack.set_defaults(func=cmd_unpack)
 
     p_info = sub.add_parser("info", aliases=["i"], help="show file info")

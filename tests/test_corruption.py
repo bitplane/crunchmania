@@ -109,3 +109,29 @@ def test_short_huffman_code_at_end_of_input():
     assert _decode_huffman(reader, [0x1411, -1] * 4, 3) == 0x141
     with pytest.raises(ValueError, match="ended unexpectedly"):
         reader.read_bit()
+
+
+@pytest.mark.parametrize("magic", [b"CrM!", b"CrM2"])
+def test_output_limit_checked_before_allocation(monkeypatch, magic):
+    import importlib
+
+    module = importlib.import_module("crunchmania.unpack")
+
+    def forbidden(*args):
+        pytest.fail("decoder called before checking output limit")
+
+    monkeypatch.setattr(module, "_unpack_standard", forbidden)
+    monkeypatch.setattr(module, "_unpack_lzh", forbidden)
+    data = struct.pack(">4sHII", magic, 0, 0xFFFFFFFF, 6) + bytes(6)
+    with pytest.raises(ValueError, match="output limit"):
+        unpack(data)
+
+
+def test_configurable_output_limit():
+    from crunchmania import pack
+
+    data = pack(b"hello")
+    with pytest.raises(ValueError, match="output limit"):
+        unpack(data, max_output_size=4)
+    assert unpack(data, max_output_size=5) == b"hello"
+    assert unpack(data, max_output_size=None) == b"hello"
